@@ -522,10 +522,15 @@ create table if not exists public.household_invites (
   email text not null check (char_length(trim(email)) between 3 and 320),
   role text not null check (role in ('full', 'view')),
   token text not null unique default encode(gen_random_bytes(16), 'hex'),
-  invited_by uuid not null references auth.users (id) on delete cascade,
+  -- No FK to auth.users: PostgREST clients use role "authenticated", which cannot SELECT
+  -- auth.users (FK checks and some RLS subqueries require that privilege and fail with 42501).
+  invited_by uuid not null,
   expires_at timestamptz not null default (now() + interval '14 days'),
   created_at timestamptz not null default now()
 );
+
+alter table public.household_invites
+  drop constraint if exists household_invites_invited_by_fkey;
 
 create unique index if not exists household_invites_house_email_lower_idx
   on public.household_invites (household_id, lower(trim(email)));
@@ -584,11 +589,8 @@ create policy "household_invites_select_invitee"
   for select
   to authenticated
   using (
-    exists (
-      select 1 from auth.users u
-      where u.id = auth.uid()
-        and lower(trim(coalesce(u.email, ''))) = lower(trim(public.household_invites.email))
-    )
+    lower(trim(coalesce(auth.jwt() ->> 'email', '')))
+    = lower(trim(public.household_invites.email))
   );
 
 create policy "household_invites_insert_admin"
