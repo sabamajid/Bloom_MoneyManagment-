@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --background: #fff7fb;
+  --foreground: #2a1a33;
+  --card-bg: rgba(255, 255, 255, 0.74);
+  --card-border: rgba(255, 255, 255, 0.8);
+  --soft-ring: rgba(244, 114, 182, 0.22);
+  --soft-shadow: 0 22px 70px -44px rgba(236, 72, 153, 0.55);
+  --hero-a: rgba(255, 182, 193, 0.5);
+  --hero-b: rgba(196, 181, 253, 0.45);
+  --hero-c: rgba(253, 230, 138, 0.28);
+}
+
+:root[data-theme="blush"] {
+  --background: #fff7fb;
+  --foreground: #2a1a33;
+  --card-bg: rgba(255, 255, 255, 0.74);
+  --card-border: rgba(255, 255, 255, 0.8);
+  --soft-ring: rgba(244, 114, 182, 0.22);
+  --soft-shadow: 0 22px 70px -44px rgba(236, 72, 153, 0.55);
+  --hero-a: rgba(255, 182, 193, 0.5);
+  --hero-b: rgba(196, 181, 253, 0.45);
+  --hero-c: rgba(253, 230, 138, 0.28);
+}
+
+:root[data-theme="lavender"] {
+  --background: #f8f6ff;
+  --foreground: #241a3b;
+  --card-bg: rgba(255, 255, 255, 0.72);
+  --card-border: rgba(219, 206, 255, 0.6);
+  --soft-ring: rgba(167, 139, 250, 0.24);
+  --soft-shadow: 0 22px 70px -44px rgba(124, 58, 237, 0.5);
+  --hero-a: rgba(216, 180, 254, 0.36);
+  --hero-b: rgba(147, 197, 253, 0.34);
+  --hero-c: rgba(196, 181, 253, 0.34);
+}
+
+:root[data-theme="beige"] {
+  --background: #fffaf3;
+  --foreground: #362718;
+  --card-bg: rgba(255, 255, 255, 0.7);
+  --card-border: rgba(246, 220, 186, 0.62);
+  --soft-ring: rgba(251, 191, 36, 0.24);
+  --soft-shadow: 0 22px 70px -44px rgba(217, 119, 6, 0.45);
+  --hero-a: rgba(254, 215, 170, 0.4);
+  --hero-b: rgba(254, 240, 138, 0.28);
+  --hero-c: rgba(253, 186, 116, 0.28);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-canvas: var(--background);
+  --color-ink: var(--foreground);
+  --font-sans: var(--font-sans-app);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans-app), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  min-height: 100dvh;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 8% 10%, var(--hero-a), transparent 34%),
+    radial-gradient(circle at 88% 18%, var(--hero-b), transparent 38%),
+    radial-gradient(circle at 50% 100%, var(--hero-c), transparent 42%);
+  z-index: -1;
+}
+
+::selection {
+  background: rgba(244, 114, 182, 0.25);
+}
