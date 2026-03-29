@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { monthBounds, monthKeyFromDate } from "@/lib/format";
+import { ensureHouseholdAccess } from "@/lib/household/access";
 import { applyMonthlySavingsRollovers } from "@/lib/savings/applyRollovers";
 import { createRouteHandlerClient } from "@/lib/supabase/route-handler";
 import { parseCreateExpenseInput } from "@/lib/validation/expense";
@@ -18,15 +19,13 @@ export async function GET(request: Request) {
 
     if (!user) return jsonError("Unauthorized", 401);
 
+    await ensureHouseholdAccess(supabase);
+
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category");
     const month = searchParams.get("month");
 
-    let query = supabase
-      .from("expenses")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("date", { ascending: false });
+    let query = supabase.from("expenses").select("*").order("date", { ascending: false });
 
     if (category && category !== "all") query = query.eq("category", category);
     if (month) {
@@ -60,6 +59,12 @@ export async function POST(request: Request) {
     if (!user) return jsonError("Unauthorized", 401);
 
     await applyMonthlySavingsRollovers(supabase, user.id);
+
+    const access = await ensureHouseholdAccess(supabase);
+    if (!access) return jsonError("Could not load household.", 500);
+    if (!access.canWriteExpenses) {
+      return jsonError("You have view-only access and cannot add transactions.", 403);
+    }
 
     const json = (await request.json()) as unknown;
     const parsed = parseCreateExpenseInput(json);
@@ -123,6 +128,7 @@ export async function POST(request: Request) {
       .from("expenses")
       .insert({
         user_id: user.id,
+        household_id: access.householdId,
         amount,
         category,
         date,

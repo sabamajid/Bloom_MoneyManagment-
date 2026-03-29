@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { formatSupabaseError } from "@/lib/supabase/formatError";
 import { createRouteHandlerClient } from "@/lib/supabase/route-handler";
 
 function jsonError(message: string, status: number) {
@@ -51,6 +52,7 @@ export async function GET() {
     }
 
     return NextResponse.json({
+      userId: user.id,
       displayName: data?.display_name ?? null,
       avatarUrl: data?.avatar_url ?? null,
     });
@@ -77,10 +79,11 @@ export async function PUT(request: Request) {
       .from("user_profiles")
       .select("display_name, avatar_url, default_monthly_limit")
       .eq("user_id", user.id)
+      .limit(1)
       .maybeSingle();
 
     if (loadErr) {
-      console.error(loadErr);
+      console.error("PUT /api/profile load:", formatSupabaseError(loadErr));
       return jsonError(loadErr.message || "Could not load profile.", 500);
     }
 
@@ -123,7 +126,7 @@ export async function PUT(request: Request) {
       .single();
 
     if (error) {
-      console.error(error);
+      console.error("PUT /api/profile upsert:", formatSupabaseError(error));
       return jsonError(error.message || "Could not save profile.", 500);
     }
 

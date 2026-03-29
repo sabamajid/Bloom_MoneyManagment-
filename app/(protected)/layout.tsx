@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { Navbar } from "@/components/layout/Navbar";
+import { formatSupabaseError } from "@/lib/supabase/formatError";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function ProtectedLayout({
@@ -19,10 +20,11 @@ export default async function ProtectedLayout({
     .from("user_profiles")
     .select("display_name, avatar_url")
     .eq("user_id", user.id)
+    .limit(1)
     .maybeSingle();
 
   if (profileError) {
-    console.error(profileError);
+    console.error("ProtectedLayout user_profiles:", formatSupabaseError(profileError));
   }
 
   const profile = !profileError

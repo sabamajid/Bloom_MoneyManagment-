@@ -4,6 +4,7 @@ import { Camera, Check, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { FamilySection } from "@/components/settings/FamilySection";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -538,6 +539,8 @@ export function SettingsClient() {
           )}
         </Card>
       </section>
+
+      <FamilySection />
 
       <section className="space-y-3">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-ink/45">Budget</h2>

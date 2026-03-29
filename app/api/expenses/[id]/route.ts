@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { isExpenseEditable } from "@/lib/expenseEditWindow";
 import { monthKeyFromDate } from "@/lib/format";
+import { ensureHouseholdAccess } from "@/lib/household/access";
 import { applyMonthlySavingsRollovers } from "@/lib/savings/applyRollovers";
 import { createRouteHandlerClient } from "@/lib/supabase/route-handler";
 import { parseCreateExpenseInput } from "@/lib/validation/expense";
@@ -43,13 +44,16 @@ export async function PUT(
 
     if (!user) return jsonError("Unauthorized", 401);
 
-    await applyMonthlySavingsRollovers(supabase, user.id);
+    const access = await ensureHouseholdAccess(supabase);
+    if (!access) return jsonError("Could not load household.", 500);
+    if (!access.canWriteExpenses) {
+      return jsonError("You have view-only access and cannot edit transactions.", 403);
+    }
 
     const { data: existing, error: fetchErr } = await supabase
       .from("expenses")
       .select("*")
       .eq("id", id)
-      .eq("user_id", user.id)
       .maybeSingle();
 
     if (fetchErr) {
@@ -59,6 +63,9 @@ export async function PUT(
     if (!existing) {
       return jsonError("Expense not found.", 404);
     }
+
+    const ownerId = existing.user_id as string;
+    await applyMonthlySavingsRollovers(supabase, ownerId);
 
     const createdAt = existing.created_at as string | undefined;
     if (!isExpenseEditable(createdAt)) {
@@ -79,7 +86,7 @@ export async function PUT(
     const { data: customRows, error: customError } = await supabase
       .from("user_categories")
       .select("name")
-      .eq("user_id", user.id);
+      .eq("user_id", ownerId);
 
     if (customError) {
       console.error(customError);
@@ -99,7 +106,7 @@ export async function PUT(
         .from("user_accounts")
         .select("id")
         .eq("id", accountId as string)
-        .eq("user_id", user.id)
+        .eq("user_id", ownerId)
         .maybeSingle();
       if (accErr) {
         console.error(accErr);
@@ -115,7 +122,7 @@ export async function PUT(
         .from("savings_ledger")
         .delete()
         .eq("expense_id", id)
-        .eq("user_id", user.id);
+        .eq("user_id", ownerId);
       if (delLedErr) {
         console.error(delLedErr);
         return jsonError(delLedErr.message || "Could not update savings history.", 500);
@@ -123,7 +130,7 @@ export async function PUT(
     }
 
     if (willSavings) {
-      const bal = await sumSavingsLedger(supabase, user.id);
+      const bal = await sumSavingsLedger(supabase, ownerId);
       if (amount > bal + 1e-6) {
         if (wasSavings) {
           const oldAmount =
@@ -132,7 +139,7 @@ export async function PUT(
               : Number.parseFloat(String(existing.amount));
           const periodMonth = monthKeyFromDate(new Date(existing.date as string));
           await supabase.from("savings_ledger").insert({
-            user_id: user.id,
+            user_id: ownerId,
             entry_type: "spend_from_savings",
             amount: Number.isFinite(oldAmount) ? -oldAmount : 0,
             source_month: null,
@@ -156,7 +163,6 @@ export async function PUT(
         account_id: spendSource === "budget" ? accountId : null,
       })
       .eq("id", id)
-      .eq("user_id", user.id)
       .select("*")
       .maybeSingle();
 
@@ -171,7 +177,7 @@ export async function PUT(
     if (willSavings) {
       const periodMonth = monthKeyFromDate(new Date(date));
       const { error: ledgerErr } = await supabase.from("savings_ledger").insert({
-        user_id: user.id,
+        user_id: ownerId,
         entry_type: "spend_from_savings",
         amount: -amount,
         source_month: null,
@@ -191,8 +197,7 @@ export async function PUT(
             spend_source: existing.spend_source ?? "budget",
             account_id: existing.account_id ?? null,
           })
-          .eq("id", id)
-          .eq("user_id", user.id);
+          .eq("id", id);
         if (wasSavings) {
           const oldAmount =
             typeof existing.amount === "number"
@@ -200,7 +205,7 @@ export async function PUT(
               : Number.parseFloat(String(existing.amount));
           const oldPeriod = monthKeyFromDate(new Date(existing.date as string));
           await supabase.from("savings_ledger").insert({
-            user_id: user.id,
+            user_id: ownerId,
             entry_type: "spend_from_savings",
             amount: Number.isFinite(oldAmount) ? -oldAmount : 0,
             source_month: null,
@@ -235,11 +240,16 @@ export async function DELETE(
 
     if (!user) return jsonError("Unauthorized", 401);
 
+    const access = await ensureHouseholdAccess(supabase);
+    if (!access) return jsonError("Could not load household.", 500);
+    if (!access.canWriteExpenses) {
+      return jsonError("You have view-only access and cannot delete transactions.", 403);
+    }
+
     const { data: row, error: fetchErr } = await supabase
       .from("expenses")
       .select("id, created_at")
       .eq("id", id)
-      .eq("user_id", user.id)
       .maybeSingle();
 
     if (fetchErr) {
@@ -261,7 +271,6 @@ export async function DELETE(
       .from("expenses")
       .delete()
       .eq("id", id)
-      .eq("user_id", user.id)
       .select("id")
       .maybeSingle();
 

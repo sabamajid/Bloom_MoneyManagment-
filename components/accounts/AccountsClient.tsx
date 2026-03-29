@@ -263,7 +263,7 @@ export function AccountsClient() {
 
       <PageHeader
         title="Accounts & savings"
-        description="Accounts track everyday cash. Savings collects unspent budget from closed months; you can spend from savings without touching your monthly limit."
+        description="Cash accounts for day-to-day spending. Month-end budget leftovers roll into your savings pool here (not on the dashboard). You can still record Pay from savings on any transaction."
       />
 
       {error ? (
@@ -406,7 +406,7 @@ export function AccountsClient() {
               <PiggyBank className="h-6 w-6" aria-hidden />
             </div>
             <div>
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-ink/45">Savings</h2>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-ink/45">Savings pool</h2>
               <p className="mt-1 text-2xl font-semibold tabular-nums text-ink">
                 {clientMounted && savingsLoading
                   ? "…"

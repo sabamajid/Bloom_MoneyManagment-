@@ -4,8 +4,8 @@ import {
   AlertTriangle,
   CalendarDays,
   CircleDollarSign,
-  PiggyBank,
   Plus,
+  Target,
   Wallet,
 } from "lucide-react";
 import Link from "next/link";
@@ -24,7 +24,6 @@ import { StatCard } from "@/components/ui/StatCard";
 import { cn } from "@/lib/cn";
 import { isExpenseEditable } from "@/lib/expenseEditWindow";
 import { formatMoney, monthKeyFromDate, utcCalendarDateKeyFromIso } from "@/lib/format";
-import type { AccountWithBalance } from "@/types/account";
 import type { Expense } from "@/types/expense";
 
 type CategoryLimitItem = {
@@ -52,19 +51,24 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
   const [transactionModal, setTransactionModal] = useState<TransactionModalState | null>(null);
 
   const [monthlyLimit, setMonthlyLimit] = useState<number | null>(null);
-  const [accounts, setAccounts] = useState<AccountWithBalance[]>([]);
+  const [canWriteExpenses, setCanWriteExpenses] = useState(true);
+  const [selfUserId, setSelfUserId] = useState<string | null>(null);
+  const [accountLabelRows, setAccountLabelRows] = useState<Array<{ id: string; name: string }>>([]);
 
   const loadAll = useCallback(async () => {
     setError(null);
     setLoading(true);
 
     try {
-      const [expensesRes, limitRes, categoriesRes, accountsRes] = await Promise.all([
-        fetch(`/api/expenses?month=${calendarMonth}`, { method: "GET" }),
-        fetch(`/api/monthly-limit?month=${calendarMonth}`, { method: "GET" }),
-        fetch("/api/categories", { method: "GET" }),
-        fetch("/api/accounts", { method: "GET" }),
-      ]);
+      const [expensesRes, limitRes, categoriesRes, labelsRes, householdRes, profileRes] =
+        await Promise.all([
+          fetch(`/api/expenses?month=${calendarMonth}`, { method: "GET" }),
+          fetch(`/api/monthly-limit?month=${calendarMonth}`, { method: "GET" }),
+          fetch("/api/categories", { method: "GET" }),
+          fetch("/api/accounts/household-labels", { method: "GET" }),
+          fetch("/api/household", { method: "GET" }),
+          fetch("/api/profile", { method: "GET" }),
+        ]);
 
       const expensesPayload = (await expensesRes.json()) as {
         error?: string;
@@ -78,13 +82,37 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
         error?: string;
         categories?: CategoryLimitItem[];
       };
-      const accountsPayload = (await accountsRes.json()) as {
+      const labelsPayload = (await labelsRes.json()) as {
         error?: string;
-        accounts?: AccountWithBalance[];
+        accounts?: Array<{ id: string; name: string }>;
+      };
+      const householdPayload = (await householdRes.json()) as {
+        error?: string;
+        selfUserId?: string;
+        canWriteExpenses?: boolean;
+      };
+      const profilePayload = (await profileRes.json()) as {
+        error?: string;
+        userId?: string;
       };
 
-      if (accountsRes.ok) {
-        setAccounts(accountsPayload.accounts ?? []);
+      const uid =
+        (profileRes.ok ? profilePayload.userId : null) ??
+        (householdRes.ok ? householdPayload.selfUserId : null) ??
+        null;
+      setSelfUserId(uid);
+
+      if (householdRes.ok) {
+        setCanWriteExpenses(householdPayload.canWriteExpenses !== false);
+      } else {
+        setCanWriteExpenses(true);
+      }
+
+      if (labelsRes.ok) {
+        const rows = labelsPayload.accounts ?? [];
+        setAccountLabelRows(rows.map((a) => ({ id: a.id, name: a.name })));
+      } else {
+        setAccountLabelRows([]);
       }
 
       if (!expensesRes.ok) {
@@ -125,6 +153,7 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
   const spentByCategoryThisMonth = useMemo(() => {
     const spentByCategory = new Map<string, number>();
     for (const e of expenses) {
+      if (selfUserId != null && e.user_id !== selfUserId) continue;
       if ((e.spend_source ?? "budget") !== "budget") continue;
       const d = new Date(e.date);
       if (Number.isNaN(d.getTime())) continue;
@@ -133,7 +162,7 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
       spentByCategory.set(e.category, (spentByCategory.get(e.category) ?? 0) + amt);
     }
     return spentByCategory;
-  }, [expenses, calendarMonth]);
+  }, [expenses, calendarMonth, selfUserId]);
 
   const monthSpent = useMemo(() => {
     let total = 0;
@@ -199,16 +228,11 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
 
   const accountLabelById = useMemo(() => {
     const m = new Map<string, string>();
-    for (const a of accounts) {
+    for (const a of accountLabelRows) {
       m.set(a.id, a.name);
     }
     return m;
-  }, [accounts]);
-
-  const totalAccountBalance = useMemo(
-    () => accounts.reduce((s, a) => s + a.balance, 0),
-    [accounts],
-  );
+  }, [accountLabelRows]);
 
   const monthBadge = (
     <span className="inline-flex items-center gap-2 rounded-full bg-white/75 px-3 py-1.5 text-xs font-semibold text-ink/65 ring-1 ring-[var(--soft-ring)]">
@@ -223,15 +247,19 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
         badge={monthBadge}
         title="Dashboard"
         action={
-          <Button
-            type="button"
-            size="lg"
-            className="w-full sm:w-auto"
-            onClick={() => setTransactionModal({ type: "add" })}
-          >
-            <Plus className="h-4 w-4 shrink-0" />
-            Add transaction
-          </Button>
+          canWriteExpenses ? (
+            <Button
+              type="button"
+              size="lg"
+              className="w-full sm:w-auto"
+              onClick={() => setTransactionModal({ type: "add" })}
+            >
+              <Plus className="h-4 w-4 shrink-0" />
+              Add transaction
+            </Button>
+          ) : (
+            <p className="text-sm font-medium text-ink/55">View-only family access</p>
+          )
         }
       />
 
@@ -245,9 +273,9 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Link href="/settings" className="group block min-h-0 rounded-[26px] outline-none focus-visible:ring-2 focus-visible:ring-violet-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas">
             <StatCard
-              kicker="Budget"
+              kicker="Monthly budget"
               value={monthlyLimit === null ? "—" : formatMoney(monthlyLimit)}
-              icon={PiggyBank}
+              icon={Target}
               tone="rose"
               className="h-full transition group-hover:brightness-[1.02]"
             />
@@ -291,67 +319,28 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
         )}
       </Section>
 
-      <Section
-        title="Accounts"
-        action={
-          <Link href="/accounts" className="text-sm font-medium text-fuchsia-700 hover:underline">
-            Manage →
-          </Link>
-        }
-      >
-        {accounts.length > 0 ? (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {accounts.map((a) => {
-                const low = a.balance < 0;
-                return (
-                  <Card key={a.id} variant="quiet" className="p-4 sm:p-5">
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={cn(
-                          "grid h-11 w-11 shrink-0 place-items-center rounded-2xl ring-1",
-                          "bg-violet-50 text-violet-800 ring-violet-200/80",
-                        )}
-                      >
-                        <Wallet className="h-5 w-5" aria-hidden />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-ink">{a.name}</p>
-                        <p className="text-xs text-ink/55">Spent {formatMoney(a.spent)}</p>
-                        <p
-                          className={cn(
-                            "mt-2 text-lg font-semibold tabular-nums text-ink",
-                            low && "text-rose-700",
-                          )}
-                        >
-                          {formatMoney(a.balance)}
-                        </p>
-                        <p className="text-xs text-ink/45">Left in account</p>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
+      <Card variant="quiet" className="border border-rose-100/80 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-50 text-violet-800 ring-1 ring-violet-200/80">
+              <Wallet className="h-5 w-5" aria-hidden />
             </div>
-            <p className="mt-4 text-sm font-medium text-ink/60">
-              Total across accounts:{" "}
-              <span className="tabular-nums text-ink">{formatMoney(totalAccountBalance)}</span>
-            </p>
-          </>
-        ) : !loading ? (
-          <Card variant="quiet" className="p-4 sm:p-5">
-            <p className="text-sm text-ink/60">
-              Add an account with a name and balance. Each transaction uses one account; balances update automatically.
-            </p>
-            <Link
-              href="/accounts"
-              className="mt-3 inline-block text-sm font-semibold text-fuchsia-700 hover:underline"
-            >
-              Accounts →
-            </Link>
-          </Card>
-        ) : null}
-      </Section>
+            <div>
+              <p className="text-sm font-semibold text-ink">Cash accounts & savings pool</p>
+              <p className="mt-1 max-w-xl text-sm text-ink/55">
+                Day-to-day balances and month-end savings live on Accounts. The dashboard stays focused on this
+                month&apos;s budget.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/accounts"
+            className="shrink-0 rounded-xl bg-white/80 px-4 py-2 text-sm font-semibold text-fuchsia-800 ring-1 ring-fuchsia-200/80 hover:bg-fuchsia-50/90"
+          >
+            Open Accounts
+          </Link>
+        </div>
+      </Card>
 
       {categoryBudgetProgress.length > 0 ? (
         <Section title="Categories">
@@ -431,9 +420,9 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
                 accountLabel={
                   e.account_id ? accountLabelById.get(e.account_id) ?? null : null
                 }
-                canEdit={isExpenseEditable(e.created_at)}
+                canEdit={canWriteExpenses && isExpenseEditable(e.created_at)}
                 onEdit={
-                  isExpenseEditable(e.created_at)
+                  canWriteExpenses && isExpenseEditable(e.created_at)
                     ? () => setTransactionModal({ type: "edit", expense: e })
                     : undefined
                 }
@@ -443,10 +432,12 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-100/70 bg-white/50 px-4 py-3.5 sm:px-5">
             <p className="text-sm text-ink/60">No transactions today.</p>
-            <Button type="button" size="md" onClick={() => setTransactionModal({ type: "add" })}>
-              <Plus className="h-4 w-4 shrink-0" />
-              Add transaction
-            </Button>
+            {canWriteExpenses ? (
+              <Button type="button" size="md" onClick={() => setTransactionModal({ type: "add" })}>
+                <Plus className="h-4 w-4 shrink-0" />
+                Add transaction
+              </Button>
+            ) : null}
           </div>
         )}
       </Section>

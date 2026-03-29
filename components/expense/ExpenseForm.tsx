@@ -259,7 +259,7 @@ export function ExpenseForm({
             </span>
             .{" "}
             <Link href="/accounts" className="font-medium text-fuchsia-700 hover:underline">
-              View savings
+              Savings balance on Accounts
             </Link>
           </p>
         ) : null}

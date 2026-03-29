@@ -48,6 +48,8 @@ export function ExpensesClient({ initialMonth, todayUtc }: Props) {
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([]);
+  const [accountLabelRows, setAccountLabelRows] = useState<Array<{ id: string; name: string }>>([]);
+  const [canWriteExpenses, setCanWriteExpenses] = useState(true);
 
   const query = useMemo(() => {
     const qs = new URLSearchParams();
@@ -60,15 +62,38 @@ export function ExpensesClient({ initialMonth, todayUtc }: Props) {
     setError(null);
     setLoading(true);
     try {
-      const [res, accRes] = await Promise.all([
+      const [res, accRes, labelsRes, householdRes] = await Promise.all([
         fetch(query, { method: "GET" }),
         fetch("/api/accounts", { method: "GET" }),
+        fetch("/api/accounts/household-labels", { method: "GET" }),
+        fetch("/api/household", { method: "GET" }),
       ]);
       const payload = (await res.json()) as { error?: string; expenses?: Expense[] };
       const accPayload = (await accRes.json()) as { accounts?: AccountWithBalance[] };
+      const labelsPayload = (await labelsRes.json()) as {
+        error?: string;
+        accounts?: Array<{ id: string; name: string }>;
+      };
+      const householdPayload = (await householdRes.json()) as {
+        error?: string;
+        canWriteExpenses?: boolean;
+      };
+
+      if (householdRes.ok) {
+        setCanWriteExpenses(householdPayload.canWriteExpenses !== false);
+      } else {
+        setCanWriteExpenses(true);
+      }
 
       if (accRes.ok) {
         setAccounts(accPayload.accounts ?? []);
+      }
+
+      if (labelsRes.ok) {
+        const rows = labelsPayload.accounts ?? [];
+        setAccountLabelRows(rows.map((r) => ({ id: r.id, name: r.name })));
+      } else {
+        setAccountLabelRows([]);
       }
 
       if (!res.ok) {
@@ -133,8 +158,11 @@ export function ExpensesClient({ initialMonth, todayUtc }: Props) {
     for (const a of accounts) {
       m.set(a.id, a.name);
     }
+    for (const r of accountLabelRows) {
+      if (!m.has(r.id)) m.set(r.id, r.name);
+    }
     return m;
-  }, [accounts]);
+  }, [accounts, accountLabelRows]);
 
   function handleViewMonthChange(monthKey: string) {
     setViewMonth(monthKey);
@@ -293,9 +321,9 @@ export function ExpensesClient({ initialMonth, todayUtc }: Props) {
                 accountLabel={
                   e.account_id ? accountLabelById.get(e.account_id) ?? null : null
                 }
-                canEdit={isExpenseEditable(e.created_at)}
+                canEdit={canWriteExpenses && isExpenseEditable(e.created_at)}
                 onEdit={
-                  isExpenseEditable(e.created_at)
+                  canWriteExpenses && isExpenseEditable(e.created_at)
                     ? () => setTransactionModal({ type: "edit", expense: e })
                     : undefined
                 }
@@ -305,24 +333,28 @@ export function ExpensesClient({ initialMonth, todayUtc }: Props) {
         ) : (
           <Card variant="quiet" className="flex flex-col items-center py-12 text-center">
             <p className="text-sm font-medium text-ink/60">No expenses</p>
-            <Button type="button" size="lg" className="mt-4" onClick={() => setTransactionModal({ type: "add" })}>
-              <Plus className="h-4 w-4" />
-              Add
-            </Button>
+            {canWriteExpenses ? (
+              <Button type="button" size="lg" className="mt-4" onClick={() => setTransactionModal({ type: "add" })}>
+                <Plus className="h-4 w-4" />
+                Add
+              </Button>
+            ) : null}
           </Card>
         )}
       </div>
 
-      <Button
-        type="button"
-        size="lg"
-        className="fixed bottom-5 right-4 z-30 h-14 w-14 rounded-full p-0 shadow-[0_12px_40px_-8px_rgba(236,72,153,0.55)] sm:bottom-6 sm:right-6 sm:h-[3.25rem] sm:w-auto sm:rounded-2xl sm:px-5"
-        onClick={() => setTransactionModal({ type: "add" })}
-        aria-label="Add transaction"
-      >
-        <Plus className="h-6 w-6 sm:h-4 sm:w-4" />
-        <span className="hidden sm:inline">Add transaction</span>
-      </Button>
+      {canWriteExpenses ? (
+        <Button
+          type="button"
+          size="lg"
+          className="fixed bottom-5 right-4 z-30 h-14 w-14 rounded-full p-0 shadow-[0_12px_40px_-8px_rgba(236,72,153,0.55)] sm:bottom-6 sm:right-6 sm:h-[3.25rem] sm:w-auto sm:rounded-2xl sm:px-5"
+          onClick={() => setTransactionModal({ type: "add" })}
+          aria-label="Add transaction"
+        >
+          <Plus className="h-6 w-6 sm:h-4 sm:w-4" />
+          <span className="hidden sm:inline">Add transaction</span>
+        </Button>
+      ) : null}
 
       <TransactionModal
         state={transactionModal}
