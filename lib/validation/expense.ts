@@ -1,4 +1,4 @@
-import type { CreateExpenseInput } from "@/types/expense";
+import type { CreateExpenseInput, SpendSource } from "@/types/expense";
 
 export function normalizeNote(value: unknown) {
   if (value === null || value === undefined) return null;
@@ -6,6 +6,9 @@ export function normalizeNote(value: unknown) {
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
 }
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function parseCreateExpenseInput(body: unknown):
   | { ok: true; value: CreateExpenseInput }
@@ -21,6 +24,7 @@ export function parseCreateExpenseInput(body: unknown):
   const dateRaw = record.date;
   const noteRaw = record.note;
   const accountIdRaw = record.accountId;
+  const spendSourceRaw = record.spendSource;
 
   if (typeof amountRaw !== "number" || !Number.isFinite(amountRaw)) {
     return { ok: false, message: "Amount must be a number." };
@@ -47,14 +51,28 @@ export function parseCreateExpenseInput(body: unknown):
 
   const note = normalizeNote(noteRaw);
 
-  if (typeof accountIdRaw !== "string") {
-    return { ok: false, message: "Account is required." };
+  let spendSource: SpendSource = "budget";
+  if (spendSourceRaw !== undefined && spendSourceRaw !== null) {
+    if (spendSourceRaw !== "budget" && spendSourceRaw !== "savings") {
+      return { ok: false, message: "Spend source must be budget or savings." };
+    }
+    spendSource = spendSourceRaw;
   }
-  const accountId = accountIdRaw.trim();
-  if (
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(accountId)
-  ) {
-    return { ok: false, message: "Invalid account." };
+
+  let accountId: string | null = null;
+  if (spendSource === "budget") {
+    if (typeof accountIdRaw !== "string") {
+      return { ok: false, message: "Account is required for budget spending." };
+    }
+    const id = accountIdRaw.trim();
+    if (!UUID_RE.test(id)) {
+      return { ok: false, message: "Invalid account." };
+    }
+    accountId = id;
+  } else {
+    if (accountIdRaw !== undefined && accountIdRaw !== null && String(accountIdRaw).trim() !== "") {
+      return { ok: false, message: "Savings spending does not use an account." };
+    }
   }
 
   return {
@@ -64,6 +82,7 @@ export function parseCreateExpenseInput(body: unknown):
       category: normalizedCategory,
       date: parsedDate.toISOString(),
       note,
+      spendSource,
       accountId,
     },
   };

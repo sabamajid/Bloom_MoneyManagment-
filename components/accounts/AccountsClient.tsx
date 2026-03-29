@@ -1,15 +1,17 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { PiggyBank, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { Modal } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { cn } from "@/lib/cn";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatUtcMonthKeyLong } from "@/lib/format";
 import type { AccountWithBalance } from "@/types/account";
+import type { SavingsMonthlyBreakdown } from "@/types/savings";
 
 export function AccountsClient() {
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([]);
@@ -18,27 +20,90 @@ export function AccountsClient() {
   const [newMoney, setNewMoney] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [accountsLoading, setAccountsLoading] = useState(true);
+  const [savingsLoading, setSavingsLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const [addingAccount, setAddingAccount] = useState(false);
+
+  const [savingsBalance, setSavingsBalance] = useState<number | null>(null);
+  const [savingsError, setSavingsError] = useState<string | null>(null);
+  const [monthlyBreakdown, setMonthlyBreakdown] = useState<SavingsMonthlyBreakdown[]>([]);
+  const [savingsLedger, setSavingsLedger] = useState<
+    Array<{
+      id: string;
+      entry_type: string;
+      amount: number | string;
+      period_month: string;
+      title?: string;
+      created_at: string;
+    }>
+  >([]);
+
+  /** Avoid hydration mismatch: server + first client paint must match (use "—"); ellipsis only after mount. */
+  const [clientMounted, setClientMounted] = useState(false);
+  useEffect(() => {
+    setClientMounted(true);
+  }, []);
 
   const load = useCallback(async () => {
-    setLoading(true);
     setError(null);
-    setInfo(null);
+    setSavingsError(null);
+
+    setAccountsLoading(true);
     try {
-      const res = await fetch("/api/accounts");
-      const payload = (await res.json()) as { error?: string; accounts?: AccountWithBalance[] };
-      if (!res.ok) {
-        setError(payload.error ?? "Could not load accounts.");
+      const accRes = await fetch("/api/accounts");
+      const accPayload = (await accRes.json()) as { error?: string; accounts?: AccountWithBalance[] };
+      if (!accRes.ok) {
+        setError(accPayload.error ?? "Could not load accounts.");
         setAccounts([]);
-        return;
+      } else {
+        setAccounts(accPayload.accounts ?? []);
       }
-      setAccounts(payload.accounts ?? []);
     } catch {
-      setError("Network error. Please try again.");
+      setError("Network error. Could not load accounts.");
+      setAccounts([]);
     } finally {
-      setLoading(false);
+      setAccountsLoading(false);
+    }
+
+    setSavingsLoading(true);
+    try {
+      const savRes = await fetch("/api/savings");
+      const savPayload = (await savRes.json()) as {
+        error?: string;
+        balance?: number;
+        monthlyBreakdown?: SavingsMonthlyBreakdown[];
+        ledger?: Array<{
+          id: string;
+          entry_type: string;
+          amount: number | string;
+          period_month: string;
+          title?: string;
+          created_at: string;
+        }>;
+      };
+      if (!savRes.ok) {
+        setSavingsBalance(null);
+        setMonthlyBreakdown([]);
+        setSavingsLedger([]);
+        setSavingsError(
+          savPayload.error ??
+            "Savings could not load. Run the savings section of supabase/schema.sql if you have not migrated yet. Accounts still work below.",
+        );
+      } else {
+        setSavingsBalance(typeof savPayload.balance === "number" ? savPayload.balance : 0);
+        setMonthlyBreakdown(savPayload.monthlyBreakdown ?? []);
+        setSavingsLedger(savPayload.ledger ?? []);
+      }
+    } catch {
+      setSavingsBalance(null);
+      setMonthlyBreakdown([]);
+      setSavingsLedger([]);
+      setSavingsError("Network error loading savings.");
+    } finally {
+      setSavingsLoading(false);
     }
   }, []);
 
@@ -71,18 +136,35 @@ export function AccountsClient() {
       return;
     }
     setError(null);
-    const res = await fetch("/api/accounts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, opening_balance: parsed }),
-    });
-    const payload = (await res.json()) as { error?: string };
-    if (!res.ok) return setError(payload.error ?? "Could not add account.");
+    setInfo(null);
+    setAddingAccount(true);
+    try {
+      const res = await fetch("/api/accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, opening_balance: parsed }),
+      });
+      let payload: { error?: string } = {};
+      try {
+        payload = (await res.json()) as { error?: string };
+      } catch {
+        setError("Invalid response from server.");
+        return;
+      }
+      if (!res.ok) {
+        setError(payload.error ?? `Could not add account (${res.status}).`);
+        return;
+      }
 
-    setNewName("");
-    setNewMoney("");
-    setInfo("Account added.");
-    await load();
+      setNewName("");
+      setNewMoney("");
+      await load();
+      setInfo("Account added.");
+    } catch {
+      setError("Network error. Check your connection and try again.");
+    } finally {
+      setAddingAccount(false);
+    }
   }
 
   async function saveRow(id: string) {
@@ -99,6 +181,7 @@ export function AccountsClient() {
       return;
     }
     setError(null);
+    setInfo(null);
     setSavingId(id);
     try {
       const res = await fetch(`/api/accounts/${id}`, {
@@ -111,18 +194,23 @@ export function AccountsClient() {
         setError(payload.error ?? "Could not save.");
         return;
       }
-      setInfo("Saved.");
       await load();
+      setInfo("Saved.");
     } finally {
       setSavingId(null);
     }
   }
 
-  async function deleteRow(id: string) {
-    const ok = window.confirm("Delete this account? Only allowed if it has no transactions.");
-    if (!ok) return;
+  function closeDeleteModal() {
+    if (deletingId) return;
+    setPendingDelete(null);
+  }
 
+  async function confirmDeleteAccount() {
+    if (!pendingDelete) return;
+    const { id, name } = pendingDelete;
     setError(null);
+    setInfo(null);
     setDeletingId(id);
     try {
       const res = await fetch(`/api/accounts/${id}`, { method: "DELETE" });
@@ -131,8 +219,16 @@ export function AccountsClient() {
         setError(payload.error ?? "Could not delete.");
         return;
       }
-      setInfo("Deleted.");
-      await load();
+      setPendingDelete(null);
+      setAccounts((prev) => prev.filter((a) => a.id !== id));
+      setAccountRows((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setInfo(`“${name}” was removed.`);
+    } catch {
+      setError("Network error. Could not delete.");
     } finally {
       setDeletingId(null);
     }
@@ -140,9 +236,34 @@ export function AccountsClient() {
 
   return (
     <div className="space-y-8">
+      <Modal
+        open={pendingDelete != null}
+        title="Delete this account?"
+        description={
+          pendingDelete
+            ? `Are you sure you want to remove “${pendingDelete.name}”? Past expenses stay in your history; they will no longer be linked to this account.`
+            : undefined
+        }
+        onClose={closeDeleteModal}
+      >
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="secondary" disabled={deletingId != null} onClick={closeDeleteModal}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            disabled={deletingId != null}
+            onClick={() => void confirmDeleteAccount()}
+          >
+            {deletingId != null ? "Deleting…" : "Delete account"}
+          </Button>
+        </div>
+      </Modal>
+
       <PageHeader
-        title="Accounts"
-        description="Add an account with a name and balance. Transactions reduce that balance automatically."
+        title="Accounts & savings"
+        description="Accounts track everyday cash. Savings collects unspent budget from closed months; you can spend from savings without touching your monthly limit."
       />
 
       {error ? (
@@ -178,14 +299,19 @@ export function AccountsClient() {
               onChange={(e) => setNewMoney(e.target.value)}
             />
           </div>
-          <Button type="button" className="w-full sm:w-auto" onClick={() => void addAccount()}>
-            Add account
+          <Button
+            type="button"
+            className="w-full sm:w-auto"
+            disabled={addingAccount || accountsLoading}
+            onClick={() => void addAccount()}
+          >
+            {addingAccount ? "…" : "Add account"}
           </Button>
         </div>
 
         <h2 className="mt-10 text-xs font-semibold uppercase tracking-wide text-ink/45">Your accounts</h2>
         <div className="mt-3 space-y-3">
-          {loading ? (
+          {accountsLoading ? (
             <div className="rounded-2xl bg-white/50 py-10 text-center text-sm text-ink/50">…</div>
           ) : sorted.length ? (
             sorted.map((a) => {
@@ -256,7 +382,7 @@ export function AccountsClient() {
                       size="sm"
                       className="text-rose-700 hover:bg-rose-50"
                       disabled={deletingId === a.id || savingId === a.id}
-                      onClick={() => void deleteRow(a.id)}
+                      onClick={() => setPendingDelete({ id: a.id, name: a.name })}
                       aria-label="Delete account"
                     >
                       {deletingId === a.id ? "…" : <Trash2 className="h-4 w-4" />}
@@ -271,6 +397,105 @@ export function AccountsClient() {
             </p>
           )}
         </div>
+      </Card>
+
+      <Card variant="quiet" className="overflow-hidden p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-teal-50 text-teal-800 ring-1 ring-teal-200/80">
+              <PiggyBank className="h-6 w-6" aria-hidden />
+            </div>
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-ink/45">Savings</h2>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-ink">
+                {clientMounted && savingsLoading
+                  ? "…"
+                  : savingsBalance == null
+                    ? "—"
+                    : formatMoney(savingsBalance)}
+              </p>
+              {savingsError ? (
+                <p className="mt-2 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-xs font-medium text-amber-950">
+                  {savingsError}
+                </p>
+              ) : null}
+              <p className="mt-1 max-w-xl text-sm text-ink/55">
+                When a month ends, any budget you did not spend here moves into savings automatically (one entry per
+                month). Spending from savings is recorded below and does not use accounts.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {monthlyBreakdown.length > 0 ? (
+          <div className="mt-6 overflow-x-auto rounded-2xl border border-rose-100/80 bg-white/60">
+            <table className="w-full min-w-[320px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-rose-100/80 text-xs font-semibold uppercase tracking-wide text-ink/45">
+                  <th className="px-3 py-2">Month</th>
+                  <th className="px-3 py-2 text-right">Surplus in</th>
+                  <th className="px-3 py-2 text-right">Spent from savings</th>
+                  <th className="px-3 py-2 text-right">Net</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyBreakdown.slice(0, 18).map((row) => (
+                  <tr key={row.monthKey} className="border-b border-rose-100/50 last:border-0">
+                    <td className="px-3 py-2 font-medium text-ink">{formatUtcMonthKeyLong(row.monthKey)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-emerald-800">
+                      {row.rolloverIn > 0 ? formatMoney(row.rolloverIn) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-rose-800">
+                      {row.spentFromSavings > 0 ? formatMoney(row.spentFromSavings) : "—"}
+                    </td>
+                    <td
+                      className={cn(
+                        "px-3 py-2 text-right font-semibold tabular-nums",
+                        row.net >= 0 ? "text-ink" : "text-rose-700",
+                      )}
+                    >
+                      {formatMoney(row.net)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="mt-6 rounded-2xl border border-rose-100/70 bg-white/40 py-4 text-center text-sm text-ink/50">
+            Monthly activity will appear after at least one closed month with a budget and surplus, or spending from
+            savings.
+          </p>
+        )}
+
+        {savingsLedger.length > 0 ? (
+          <div className="mt-6">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-ink/45">History</h3>
+            <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
+              {savingsLedger.slice(0, 40).map((row) => {
+                const amt = typeof row.amount === "number" ? row.amount : Number.parseFloat(String(row.amount));
+                const positive = Number.isFinite(amt) && amt >= 0;
+                return (
+                  <li
+                    key={row.id}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-rose-100/70 bg-white/50 px-3 py-2 text-sm"
+                  >
+                    <span className="min-w-0 text-ink/80">{row.title ?? row.entry_type}</span>
+                    <span
+                      className={cn(
+                        "shrink-0 font-semibold tabular-nums",
+                        positive ? "text-emerald-800" : "text-rose-800",
+                      )}
+                    >
+                      {positive ? "+" : ""}
+                      {Number.isFinite(amt) ? formatMoney(Math.abs(amt)) : "—"}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
       </Card>
     </div>
   );

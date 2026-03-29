@@ -107,9 +107,9 @@ export function downloadExpensesMonthPdf(options: {
   const theme = resolveTheme(options.themeAttr ?? document.documentElement.getAttribute("data-theme"));
   const p = PALETTES[theme];
 
-  const expenses = [...options.expenses].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-  );
+  const expenses = [...options.expenses]
+    .filter((e) => (e.spend_source ?? "budget") === "budget")
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   const total = expenses.reduce((sum, e) => sum + normalizeAmount(e.amount), 0);
   const limit = options.monthlyLimit;
   const monthLong = formatUtcMonthKeyLong(options.monthKey);

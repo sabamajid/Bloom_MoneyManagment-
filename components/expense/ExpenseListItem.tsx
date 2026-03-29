@@ -1,7 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -18,39 +17,23 @@ function normalizeAmount(amount: Expense["amount"]) {
 
 export function ExpenseListItem({
   expense,
-  onDeleted,
   accountLabel,
+  canEdit,
+  onEdit,
 }: {
   expense: Expense;
-  onDeleted: (id: string) => void;
   /** Friendly label when `account_id` is set; omit for older rows without an account. */
   accountLabel?: string | null;
+  /** When true and `onEdit` is set, shows an Edit control (e.g. within 24h of `created_at`). */
+  canEdit?: boolean;
+  onEdit?: () => void;
 }) {
+  const fromSavings = (expense.spend_source ?? "budget") === "savings";
   const meta = getCategoryMeta(expense.category);
   const Icon = meta.icon;
-  const [pending, setPending] = useState(false);
 
   const dateLabel = formatExpenseDate(expense.date);
-
-  async function onDelete() {
-    const ok = window.confirm("Delete this expense?");
-    if (!ok) return;
-
-    setPending(true);
-    try {
-      const res = await fetch(`/api/expenses/${expense.id}`, { method: "DELETE" });
-      const payload = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        window.alert(payload.error ?? "Could not delete expense.");
-        return;
-      }
-      onDeleted(expense.id);
-    } catch {
-      window.alert("Network error. Please try again.");
-    } finally {
-      setPending(false);
-    }
-  }
+  const showEdit = Boolean(canEdit && onEdit);
 
   return (
     <Card variant="quiet" className="p-4">
@@ -70,9 +53,22 @@ export function ExpenseListItem({
               <div className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-semibold text-ink/55 ring-1 ring-rose-100/70">
                 {dateLabel}
               </div>
-              {accountLabel ? (
+              {fromSavings ? (
+                <div className="rounded-full bg-teal-50/90 px-2 py-0.5 text-[11px] font-semibold text-teal-900/90 ring-1 ring-teal-200/80">
+                  Savings
+                </div>
+              ) : (
+                <div className="rounded-full bg-emerald-50/90 px-2 py-0.5 text-[11px] font-semibold text-emerald-900/85 ring-1 ring-emerald-200/80">
+                  Budget
+                </div>
+              )}
+              {!fromSavings && accountLabel ? (
                 <div className="rounded-full bg-violet-50/90 px-2 py-0.5 text-[11px] font-semibold text-violet-900/90 ring-1 ring-violet-200/80">
                   {accountLabel}
+                </div>
+              ) : !fromSavings && !accountLabel ? (
+                <div className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-medium text-ink/45 ring-1 ring-rose-100/60">
+                  {expense.account_id ? "Account removed" : "No account"}
                 </div>
               ) : null}
             </div>
@@ -86,16 +82,18 @@ export function ExpenseListItem({
           <div className="text-base font-semibold tracking-tight text-ink">
             {formatMoney(normalizeAmount(expense.amount))}
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            className="rounded-2xl px-2.5 py-2 text-rose-700 hover:bg-rose-50"
-            onClick={onDelete}
-            disabled={pending}
-            aria-label="Delete expense"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {showEdit ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-1 rounded-2xl px-2.5 py-2 text-ink/80 hover:bg-white/70"
+              onClick={onEdit}
+            >
+              <Pencil className="h-3.5 w-3.5" aria-hidden />
+              Edit
+            </Button>
+          ) : null}
         </div>
       </div>
     </Card>

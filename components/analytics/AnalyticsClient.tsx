@@ -63,6 +63,7 @@ export function AnalyticsClient() {
   const pieData = useMemo(() => {
     const map = new Map<string, number>();
     for (const e of expenses) {
+      if ((e.spend_source ?? "budget") !== "budget") continue;
       const amt = normalizeAmount(e.amount);
       map.set(e.category, (map.get(e.category) ?? 0) + amt);
     }
@@ -72,6 +73,7 @@ export function AnalyticsClient() {
   const barData = useMemo(() => {
     const map = new Map<string, number>();
     for (const e of expenses) {
+      if ((e.spend_source ?? "budget") !== "budget") continue;
       const month = monthKeyFromDate(new Date(e.date));
       map.set(month, (map.get(month) ?? 0) + normalizeAmount(e.amount));
     }
@@ -84,6 +86,7 @@ export function AnalyticsClient() {
   const lineData = useMemo(() => {
     const map = new Map<string, number>();
     for (const e of expenses) {
+      if ((e.spend_source ?? "budget") !== "budget") continue;
       const d = new Date(e.date);
       if (Number.isNaN(d.getTime())) continue;
       const day = d.toISOString().slice(0, 10);
@@ -97,7 +100,10 @@ export function AnalyticsClient() {
 
   return (
     <div className="space-y-10">
-      <PageHeader title="Analytics" />
+      <PageHeader
+        title="Analytics"
+        description="Charts include budget spending only. Savings spending is tracked under Accounts & savings."
+      />
 
       {error ? (
         <div className="rounded-2xl border border-rose-200/80 bg-rose-50/70 px-4 py-3 text-sm font-semibold text-rose-900">

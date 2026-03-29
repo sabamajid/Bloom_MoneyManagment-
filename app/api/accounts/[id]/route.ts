@@ -68,22 +68,15 @@ export async function DELETE(
 
     if (!user) return jsonError("Unauthorized", 401);
 
-    const { count, error: countError } = await supabase
+    const { error: unlinkError } = await supabase
       .from("expenses")
-      .select("id", { count: "exact", head: true })
+      .update({ account_id: null })
       .eq("user_id", user.id)
       .eq("account_id", idParsed.value);
 
-    if (countError) {
-      console.error(countError);
-      return jsonError("Could not verify transactions.", 500);
-    }
-
-    if (count && count > 0) {
-      return jsonError(
-        "This account has transactions. Delete those first or keep the account.",
-        400,
-      );
+    if (unlinkError) {
+      console.error(unlinkError);
+      return jsonError(unlinkError.message || "Could not unlink transactions from this account.", 500);
     }
 
     const { data, error } = await supabase

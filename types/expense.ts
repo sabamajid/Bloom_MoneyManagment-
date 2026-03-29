@@ -1,3 +1,5 @@
+export type SpendSource = "budget" | "savings";
+
 export type Expense = {
   id: string;
   user_id: string;
@@ -6,8 +8,11 @@ export type Expense = {
   category: string;
   date: string;
   note: string | null;
-  /** Which account this spend drew from (required for new rows; legacy rows may be null or omitted). */
+  /** Which account this spend drew from (budget only; savings spends omit). */
   account_id?: string | null;
+  spend_source?: SpendSource;
+  /** When the row was inserted; used for the 24h edit/delete window. */
+  created_at?: string;
 };
 
 export type CreateExpenseInput = {
@@ -15,7 +20,9 @@ export type CreateExpenseInput = {
   category: string;
   date: string;
   note?: string | null;
-  accountId: string;
+  spendSource: SpendSource;
+  /** Required when spendSource is budget. */
+  accountId?: string | null;
 };
 
 export type UserCategory = {

@@ -11,14 +11,18 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { AddExpenseModal } from "@/components/expense/AddExpenseModal";
 import { ExpenseListItem } from "@/components/expense/ExpenseListItem";
+import {
+  TransactionModal,
+  type TransactionModalState,
+} from "@/components/expense/TransactionModal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Section } from "@/components/ui/Section";
 import { StatCard } from "@/components/ui/StatCard";
 import { cn } from "@/lib/cn";
+import { isExpenseEditable } from "@/lib/expenseEditWindow";
 import { formatMoney, monthKeyFromDate, utcCalendarDateKeyFromIso } from "@/lib/format";
 import type { AccountWithBalance } from "@/types/account";
 import type { Expense } from "@/types/expense";
@@ -45,7 +49,7 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
   const [categoryLimits, setCategoryLimits] = useState<CategoryLimitItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [transactionModal, setTransactionModal] = useState<TransactionModalState | null>(null);
 
   const [monthlyLimit, setMonthlyLimit] = useState<number | null>(null);
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([]);
@@ -121,6 +125,7 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
   const spentByCategoryThisMonth = useMemo(() => {
     const spentByCategory = new Map<string, number>();
     for (const e of expenses) {
+      if ((e.spend_source ?? "budget") !== "budget") continue;
       const d = new Date(e.date);
       if (Number.isNaN(d.getTime())) continue;
       if (monthKeyFromDate(d) !== calendarMonth) continue;
@@ -218,7 +223,12 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
         badge={monthBadge}
         title="Dashboard"
         action={
-          <Button type="button" size="lg" className="w-full sm:w-auto" onClick={() => setModalOpen(true)}>
+          <Button
+            type="button"
+            size="lg"
+            className="w-full sm:w-auto"
+            onClick={() => setTransactionModal({ type: "add" })}
+          >
             <Plus className="h-4 w-4 shrink-0" />
             Add transaction
           </Button>
@@ -421,16 +431,19 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
                 accountLabel={
                   e.account_id ? accountLabelById.get(e.account_id) ?? null : null
                 }
-                onDeleted={() => {
-                  void loadAll();
-                }}
+                canEdit={isExpenseEditable(e.created_at)}
+                onEdit={
+                  isExpenseEditable(e.created_at)
+                    ? () => setTransactionModal({ type: "edit", expense: e })
+                    : undefined
+                }
               />
             ))}
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-100/70 bg-white/50 px-4 py-3.5 sm:px-5">
             <p className="text-sm text-ink/60">No transactions today.</p>
-            <Button type="button" size="md" onClick={() => setModalOpen(true)}>
+            <Button type="button" size="md" onClick={() => setTransactionModal({ type: "add" })}>
               <Plus className="h-4 w-4 shrink-0" />
               Add transaction
             </Button>
@@ -500,10 +513,10 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
         </Section>
       ) : null}
 
-      <AddExpenseModal
-        open={modalOpen}
-        onOpenChange={setModalOpen}
-        onCreated={() => {
+      <TransactionModal
+        state={transactionModal}
+        onClose={() => setTransactionModal(null)}
+        onFinished={() => {
           void loadAll();
         }}
       />

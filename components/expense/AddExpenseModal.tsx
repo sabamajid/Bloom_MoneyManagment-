@@ -1,9 +1,6 @@
 "use client";
 
-import { Modal } from "@/components/ui/Modal";
-import type { Expense } from "@/types/expense";
-
-import { ExpenseForm } from "./ExpenseForm";
+import { TransactionModal } from "@/components/expense/TransactionModal";
 
 export function AddExpenseModal({
   open,
@@ -12,21 +9,15 @@ export function AddExpenseModal({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated: (expense: Expense) => void;
+  onCreated: () => void;
 }) {
   return (
-    <Modal
-      open={open}
+    <TransactionModal
+      state={open ? { type: "add" } : null}
       onClose={() => onOpenChange(false)}
-      title="Add transaction"
-    >
-      <ExpenseForm
-        onCancel={() => onOpenChange(false)}
-        onCreated={(expense) => {
-          onCreated(expense);
-          onOpenChange(false);
-        }}
-      />
-    </Modal>
+      onFinished={() => {
+        onCreated();
+      }}
+    />
   );
 }

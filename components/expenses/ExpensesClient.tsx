@@ -3,13 +3,17 @@
 import { Download, Filter, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { AddExpenseModal } from "@/components/expense/AddExpenseModal";
 import { ExpenseListItem } from "@/components/expense/ExpenseListItem";
+import {
+  TransactionModal,
+  type TransactionModalState,
+} from "@/components/expense/TransactionModal";
 import { ExpensesMiniCalendar } from "@/components/expenses/ExpensesMiniCalendar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { cn } from "@/lib/cn";
+import { isExpenseEditable } from "@/lib/expenseEditWindow";
 import {
   formatMoney,
   formatUtcDayKeyNice,
@@ -39,7 +43,7 @@ export function ExpensesClient({ initialMonth, todayUtc }: Props) {
   const [monthExpenses, setMonthExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [transactionModal, setTransactionModal] = useState<TransactionModalState | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -289,16 +293,19 @@ export function ExpensesClient({ initialMonth, todayUtc }: Props) {
                 accountLabel={
                   e.account_id ? accountLabelById.get(e.account_id) ?? null : null
                 }
-                onDeleted={() => {
-                  void load();
-                }}
+                canEdit={isExpenseEditable(e.created_at)}
+                onEdit={
+                  isExpenseEditable(e.created_at)
+                    ? () => setTransactionModal({ type: "edit", expense: e })
+                    : undefined
+                }
               />
             ))}
           </div>
         ) : (
           <Card variant="quiet" className="flex flex-col items-center py-12 text-center">
             <p className="text-sm font-medium text-ink/60">No expenses</p>
-            <Button type="button" size="lg" className="mt-4" onClick={() => setModalOpen(true)}>
+            <Button type="button" size="lg" className="mt-4" onClick={() => setTransactionModal({ type: "add" })}>
               <Plus className="h-4 w-4" />
               Add
             </Button>
@@ -310,17 +317,17 @@ export function ExpensesClient({ initialMonth, todayUtc }: Props) {
         type="button"
         size="lg"
         className="fixed bottom-5 right-4 z-30 h-14 w-14 rounded-full p-0 shadow-[0_12px_40px_-8px_rgba(236,72,153,0.55)] sm:bottom-6 sm:right-6 sm:h-[3.25rem] sm:w-auto sm:rounded-2xl sm:px-5"
-        onClick={() => setModalOpen(true)}
+        onClick={() => setTransactionModal({ type: "add" })}
         aria-label="Add transaction"
       >
         <Plus className="h-6 w-6 sm:h-4 sm:w-4" />
         <span className="hidden sm:inline">Add transaction</span>
       </Button>
 
-      <AddExpenseModal
-        open={modalOpen}
-        onOpenChange={setModalOpen}
-        onCreated={() => {
+      <TransactionModal
+        state={transactionModal}
+        onClose={() => setTransactionModal(null)}
+        onFinished={() => {
           void load();
         }}
       />
