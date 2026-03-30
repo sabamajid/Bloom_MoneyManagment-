@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { cn } from "@/lib/cn";
@@ -73,16 +73,39 @@ export function Navbar({
   className?: string;
 }) {
   const pathname = usePathname();
-  const [avatarBroken, setAvatarBroken] = useState(false);
-
-  useEffect(() => {
-    setAvatarBroken(false);
-  }, [avatarUrl]);
-
-  const showAvatar = Boolean(avatarUrl && !avatarBroken);
   const mark = useMemo(() => initials(displayName, email), [displayName, email]);
   const hiName = useMemo(() => greetingName(displayName, email), [displayName, email]);
   const items = useMemo(() => navItems(showAccounts), [showAccounts]);
+
+  function AvatarBadge() {
+    const [avatarBroken, setAvatarBroken] = useState(false);
+    const showAvatar = Boolean(avatarUrl && !avatarBroken);
+
+    return (
+      <div
+        className={cn(
+          "grid h-9 w-9 place-items-center overflow-hidden rounded-2xl ring-1 transition group-hover:-translate-y-0.5",
+          showAvatar
+            ? "bg-white ring-rose-100/90 shadow-[0_10px_28px_-18px_rgba(236,72,153,0.45)]"
+            : "bg-gradient-to-br from-rose-300/90 via-fuchsia-300/80 to-violet-300/90 shadow-[0_14px_40px_-28px_rgba(236,72,153,0.75)] ring-white/70",
+        )}
+      >
+        {showAvatar ? (
+          // eslint-disable-next-line @next/next/no-img-element -- user-supplied URL; avoid remotePatterns config
+          <img
+            src={avatarUrl!}
+            alt=""
+            width={36}
+            height={36}
+            className="h-full w-full object-cover"
+            onError={() => setAvatarBroken(true)}
+          />
+        ) : (
+          <span className="text-[11px] font-black text-white">{mark}</span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <header
@@ -100,28 +123,8 @@ export function Navbar({
             aria-label="Profile & avatar — open Settings"
             title="Edit profile"
           >
-            <div
-              className={cn(
-                "grid h-9 w-9 place-items-center overflow-hidden rounded-2xl ring-1 transition group-hover:-translate-y-0.5",
-                showAvatar
-                  ? "bg-white ring-rose-100/90 shadow-[0_10px_28px_-18px_rgba(236,72,153,0.45)]"
-                  : "bg-gradient-to-br from-rose-300/90 via-fuchsia-300/80 to-violet-300/90 shadow-[0_14px_40px_-28px_rgba(236,72,153,0.75)] ring-white/70",
-              )}
-            >
-              {showAvatar ? (
-                // eslint-disable-next-line @next/next/no-img-element -- user-supplied URL; avoid remotePatterns config
-                <img
-                  src={avatarUrl!}
-                  alt=""
-                  width={36}
-                  height={36}
-                  className="h-full w-full object-cover"
-                  onError={() => setAvatarBroken(true)}
-                />
-              ) : (
-                <span className="text-[11px] font-black text-white">{mark}</span>
-              )}
-            </div>
+            {/* Key forces remount when avatarUrl changes so internal error state resets. */}
+            <AvatarBadge key={avatarUrl ?? "no-avatar"} />
           </Link>
           <Link href="/dashboard" className="group min-w-0 leading-tight">
             <div className="text-sm font-semibold tracking-tight text-ink transition group-hover:text-ink/90">
