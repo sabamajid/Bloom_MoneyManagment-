@@ -40,14 +40,14 @@ async function earliestActivityMonth(supabase: SupabaseClient, userId: string): 
 
   const { data: fe } = await supabase
     .from("expenses")
-    .select("date")
+    .select("spent_at")
     .eq("user_id", userId)
-    .order("date", { ascending: true })
+    .order("spent_at", { ascending: true })
     .limit(1)
     .maybeSingle();
 
-  if (fe?.date) {
-    const mk = monthKeyFromDate(new Date(fe.date as string));
+  if (fe?.spent_at) {
+    const mk = monthKeyFromDate(new Date(fe.spent_at as string));
     if (mk) candidates.push(mk);
   }
 
@@ -102,8 +102,8 @@ export async function applyMonthlySavingsRollovers(
             .from("expenses")
             .select("amount, spend_source")
             .eq("user_id", userId)
-            .gte("date", bounds.startIso)
-            .lt("date", bounds.endIso);
+            .gte("spent_at", bounds.startIso)
+            .lt("spent_at", bounds.endIso);
 
           for (const row of expRows ?? []) {
             const src = (row.spend_source as string | null) ?? "budget";

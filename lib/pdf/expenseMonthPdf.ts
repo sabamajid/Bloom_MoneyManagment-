@@ -109,7 +109,7 @@ export function downloadExpensesMonthPdf(options: {
 
   const expenses = [...options.expenses]
     .filter((e) => (e.spend_source ?? "budget") === "budget")
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    .sort((a, b) => new Date(a.spent_at).getTime() - new Date(b.spent_at).getTime());
   const total = expenses.reduce((sum, e) => sum + normalizeAmount(e.amount), 0);
   const limit = options.monthlyLimit;
   const monthLong = formatUtcMonthKeyLong(options.monthKey);
@@ -195,7 +195,7 @@ export function downloadExpensesMonthPdf(options: {
       doc.rect(M, y - 10, pageW - 2 * M, 18, "F");
     }
 
-    const date = item.date.slice(0, 10);
+    const date = item.spent_at.slice(0, 10);
     const amount = formatMoney(normalizeAmount(item.amount));
     const noteRaw = (item.note ?? "—").trim() || "—";
     const cat = item.category.length > 22 ? `${item.category.slice(0, 20)}…` : item.category;

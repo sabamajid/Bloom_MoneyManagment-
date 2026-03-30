@@ -137,7 +137,7 @@ export async function PUT(
             typeof existing.amount === "number"
               ? existing.amount
               : Number.parseFloat(String(existing.amount));
-          const periodMonth = monthKeyFromDate(new Date(existing.date as string));
+          const periodMonth = monthKeyFromDate(new Date(existing.spent_at as string));
           await supabase.from("savings_ledger").insert({
             user_id: ownerId,
             entry_type: "spend_from_savings",
@@ -157,7 +157,7 @@ export async function PUT(
       .update({
         amount,
         category,
-        date,
+        spent_at: date,
         note,
         spend_source: spendSource,
         account_id: spendSource === "budget" ? accountId : null,
@@ -192,7 +192,7 @@ export async function PUT(
           .update({
             amount: existing.amount,
             category: existing.category,
-            date: existing.date,
+            spent_at: existing.spent_at,
             note: existing.note,
             spend_source: existing.spend_source ?? "budget",
             account_id: existing.account_id ?? null,
@@ -203,7 +203,7 @@ export async function PUT(
             typeof existing.amount === "number"
               ? existing.amount
               : Number.parseFloat(String(existing.amount));
-          const oldPeriod = monthKeyFromDate(new Date(existing.date as string));
+          const oldPeriod = monthKeyFromDate(new Date(existing.spent_at as string));
           await supabase.from("savings_ledger").insert({
             user_id: ownerId,
             entry_type: "spend_from_savings",

@@ -6,7 +6,7 @@ export type Expense = {
   /** Supabase `numeric` may arrive as a string in JSON responses. */
   amount: number | string;
   category: string;
-  date: string;
+  spent_at: string;
   note: string | null;
   /** Which account this spend drew from (budget only; savings spends omit). */
   account_id?: string | null;

@@ -74,7 +74,7 @@ export function AnalyticsClient() {
     const map = new Map<string, number>();
     for (const e of expenses) {
       if ((e.spend_source ?? "budget") !== "budget") continue;
-      const month = monthKeyFromDate(new Date(e.date));
+      const month = monthKeyFromDate(new Date(e.spent_at));
       map.set(month, (map.get(month) ?? 0) + normalizeAmount(e.amount));
     }
     return [...map.entries()]
@@ -87,7 +87,7 @@ export function AnalyticsClient() {
     const map = new Map<string, number>();
     for (const e of expenses) {
       if ((e.spend_source ?? "budget") !== "budget") continue;
-      const d = new Date(e.date);
+      const d = new Date(e.spent_at);
       if (Number.isNaN(d.getTime())) continue;
       const day = d.toISOString().slice(0, 10);
       map.set(day, (map.get(day) ?? 0) + normalizeAmount(e.amount));

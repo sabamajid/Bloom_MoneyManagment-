@@ -46,7 +46,7 @@ export async function GET() {
     if (expensesRes.error) {
       expensesRes = await supabase
         .from("expenses")
-        .select("account_id, amount")
+        .select("account_id, amount, spend_source")
         .eq("user_id", user.id)
         .not("account_id", "is", null);
     }

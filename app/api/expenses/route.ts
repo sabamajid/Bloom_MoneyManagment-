@@ -25,14 +25,14 @@ export async function GET(request: Request) {
     const category = searchParams.get("category");
     const month = searchParams.get("month");
 
-    let query = supabase.from("expenses").select("*").order("date", { ascending: false });
+    let query = supabase.from("expenses").select("*").order("spent_at", { ascending: false });
 
     if (category && category !== "all") query = query.eq("category", category);
     if (month) {
       if (!/^\d{4}-\d{2}$/.test(month)) return jsonError("Invalid month format. Use YYYY-MM.", 400);
       const bounds = monthBounds(month);
       if (!bounds) return jsonError("Invalid month format. Use YYYY-MM.", 400);
-      query = query.gte("date", bounds.startIso).lt("date", bounds.endIso);
+      query = query.gte("spent_at", bounds.startIso).lt("spent_at", bounds.endIso);
     }
 
     const { data, error } = await query;
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
         household_id: access.householdId,
         amount,
         category,
-        date,
+        spent_at: date,
         note,
         spend_source: spendSource,
         account_id: spendSource === "budget" ? accountId : null,

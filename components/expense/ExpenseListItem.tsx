@@ -32,7 +32,7 @@ export function ExpenseListItem({
   const meta = getCategoryMeta(expense.category);
   const Icon = meta.icon;
 
-  const dateLabel = formatExpenseDate(expense.date);
+  const dateLabel = formatExpenseDate(expense.spent_at);
   const showEdit = Boolean(canEdit && onEdit);
 
   return (

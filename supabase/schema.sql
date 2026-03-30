@@ -8,13 +8,29 @@ create table if not exists public.expenses (
   user_id uuid not null references auth.users (id) on delete cascade,
   amount numeric(12, 2) not null check (amount > 0),
   category text not null,
-  date timestamptz not null default now(),
+  spent_at timestamptz not null default now(),
   note text,
   created_at timestamptz not null default now()
 );
 
-create index if not exists expenses_user_id_date_idx
-  on public.expenses (user_id, date desc);
+-- Migrate legacy column name `date` (reserved word) → spent_at
+drop index if exists public.expenses_user_id_date_idx;
+do $migrate_expenses_spent_at$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'expenses'
+      and column_name = 'date'
+  ) then
+    alter table public.expenses rename column date to spent_at;
+  end if;
+end;
+$migrate_expenses_spent_at$;
+
+create index if not exists expenses_user_id_spent_at_idx
+  on public.expenses (user_id, spent_at desc);
 
 alter table public.expenses enable row level security;
 

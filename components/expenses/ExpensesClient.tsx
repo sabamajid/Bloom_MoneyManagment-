@@ -156,7 +156,7 @@ export function ExpensesClient({ initialMonth, todayUtc }: Props) {
   const dayTotals = useMemo(() => {
     const m = new Map<string, number>();
     for (const e of monthExpenses) {
-      const key = utcCalendarDateKeyFromIso(e.date);
+      const key = utcCalendarDateKeyFromIso(e.spent_at);
       if (!key) continue;
       m.set(key, (m.get(key) ?? 0) + normalizeAmount(e.amount));
     }
@@ -165,7 +165,7 @@ export function ExpensesClient({ initialMonth, todayUtc }: Props) {
 
   const displayedExpenses = useMemo(() => {
     if (!selectedDay) return monthExpenses;
-    return monthExpenses.filter((e) => utcCalendarDateKeyFromIso(e.date) === selectedDay);
+    return monthExpenses.filter((e) => utcCalendarDateKeyFromIso(e.spent_at) === selectedDay);
   }, [monthExpenses, selectedDay]);
 
   const displayedTotal = useMemo(

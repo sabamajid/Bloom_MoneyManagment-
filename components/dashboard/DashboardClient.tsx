@@ -156,7 +156,7 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
     for (const e of expenses) {
       if (!scopeAllHousehold && selfUserId != null && e.user_id !== selfUserId) continue;
       if ((e.spend_source ?? "budget") !== "budget") continue;
-      const d = new Date(e.date);
+      const d = new Date(e.spent_at);
       if (Number.isNaN(d.getTime())) continue;
       if (monthKeyFromDate(d) !== calendarMonth) continue;
       const amt = normalizeAmount(e.amount);
@@ -222,8 +222,8 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
 
   const todayExpenses = useMemo(() => {
     if (!todayUtc) return [];
-    const list = expenses.filter((e) => utcCalendarDateKeyFromIso(e.date) === todayUtc);
-    list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const list = expenses.filter((e) => utcCalendarDateKeyFromIso(e.spent_at) === todayUtc);
+    list.sort((a, b) => new Date(b.spent_at).getTime() - new Date(a.spent_at).getTime());
     return list;
   }, [expenses, todayUtc]);
 

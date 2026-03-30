@@ -56,7 +56,7 @@ export function ExpenseForm({
     const amt = typeof exp.amount === "number" ? exp.amount : Number.parseFloat(String(exp.amount));
     setAmount(Number.isFinite(amt) ? String(amt) : "");
     setCategory(exp.category);
-    setDate(utcCalendarDateKeyFromIso(exp.date) ?? today);
+    setDate(utcCalendarDateKeyFromIso(exp.spent_at) ?? today);
     setNote(exp.note ?? "");
     setSpendSource(exp.spend_source ?? "budget");
     setAccountId(exp.account_id ?? "");
