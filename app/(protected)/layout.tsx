@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { Navbar } from "@/components/layout/Navbar";
+import { ensureHouseholdAccess } from "@/lib/household/access";
 import { formatSupabaseError } from "@/lib/supabase/formatError";
 import { createClient } from "@/lib/supabase/server";
 
@@ -15,6 +16,9 @@ export default async function ProtectedLayout({
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
+
+  const householdAccess = await ensureHouseholdAccess(supabase);
+  const showAccounts = householdAccess?.role !== "view";
 
   const { data: profileRow, error: profileError } = await supabase
     .from("user_profiles")
@@ -37,6 +41,7 @@ export default async function ProtectedLayout({
         email={user.email ?? "friend"}
         displayName={profile?.display_name ?? null}
         avatarUrl={profile?.avatar_url ?? null}
+        showAccounts={showAccounts}
       />
       <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pb-20 sm:pt-10">{children}</main>
     </div>

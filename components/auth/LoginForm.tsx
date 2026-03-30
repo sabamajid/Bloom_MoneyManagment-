@@ -10,8 +10,10 @@ import { createClient } from "@/lib/supabase/client";
 
 export function LoginForm({
   authCallbackFailed,
+  nextPath = "/dashboard",
 }: {
   authCallbackFailed?: boolean;
+  nextPath?: string;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -40,7 +42,7 @@ export function LoginForm({
         return;
       }
 
-      router.push("/dashboard");
+      router.push(nextPath);
       router.refresh();
     } catch {
       setError("Network error. Please try again.");

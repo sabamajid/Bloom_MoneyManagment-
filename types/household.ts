@@ -9,7 +9,8 @@ export type HouseholdMemberRow = {
 
 export type HouseholdInviteRow = {
   id: string;
-  email: string;
+  token: string;
+  email: string | null;
   role: string;
   expires_at: string;
   created_at: string;

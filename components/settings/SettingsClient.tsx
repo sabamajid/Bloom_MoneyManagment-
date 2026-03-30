@@ -38,6 +38,7 @@ export function SettingsClient() {
 
   const [profileDisplayName, setProfileDisplayName] = useState("");
   const [profileAvatarUrl, setProfileAvatarUrl] = useState("");
+  const [profileHousehold, setProfileHousehold] = useState<{ name: string; role: string } | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
@@ -52,10 +53,12 @@ export function SettingsClient() {
           error?: string;
           displayName?: string | null;
           avatarUrl?: string | null;
+          household?: { name: string; role: string } | null;
         };
         if (cancelled || !res.ok) return;
         setProfileDisplayName(payload.displayName ?? "");
         setProfileAvatarUrl(payload.avatarUrl ?? "");
+        setProfileHousehold(payload.household ?? null);
       } catch {
         // ignore
       } finally {
@@ -510,6 +513,24 @@ export function SettingsClient() {
                   value={profileDisplayName}
                   onChange={(e) => setProfileDisplayName(e.target.value)}
                 />
+                {profileHousehold ? (
+                  <p className="rounded-xl border border-teal-200/75 bg-teal-50/80 px-3 py-2 text-sm text-teal-950">
+                    <span className="font-semibold">{profileHousehold.name}</span>
+                    <span className="text-teal-800/90">
+                      {" · "}
+                      {profileHousehold.role === "admin"
+                        ? "Admin"
+                        : profileHousehold.role === "full"
+                          ? "Full access"
+                          : "Guest"}
+                    </span>
+                    {profileHousehold.role === "view" ? (
+                      <span className="mt-1 block text-xs font-medium text-teal-900/80">
+                        Guest profile — you can see shared household activity. Ask your admin if you need full access.
+                      </span>
+                    ) : null}
+                  </p>
+                ) : null}
                 <div className="flex flex-wrap items-center gap-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-ink/45">Theme</p>
                   <div className="flex gap-2">

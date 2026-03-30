@@ -7,13 +7,18 @@ import { useEffect, useMemo, useState } from "react";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { cn } from "@/lib/cn";
 
-const NAV = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/expenses", label: "Expenses" },
-  { href: "/accounts", label: "Accounts" },
-  { href: "/analytics", label: "Analytics" },
-  { href: "/settings", label: "Settings" },
-] as const;
+function navItems(showAccounts: boolean) {
+  const core = [
+    { href: "/dashboard", label: "Dashboard" },
+    { href: "/expenses", label: "Expenses" },
+  ] as const;
+  const accounts = [{ href: "/accounts", label: "Accounts" }] as const;
+  const tail = [
+    { href: "/analytics", label: "Analytics" },
+    { href: "/settings", label: "Settings" },
+  ] as const;
+  return showAccounts ? [...core, ...accounts, ...tail] : [...core, ...tail];
+}
 
 function greetingName(displayName: string | null | undefined, email: string) {
   const trimmed = displayName?.trim();
@@ -57,11 +62,14 @@ export function Navbar({
   email,
   displayName,
   avatarUrl,
+  showAccounts = true,
   className,
 }: {
   email: string;
   displayName?: string | null;
   avatarUrl?: string | null;
+  /** Guests (household view role) — hide balances & account management. */
+  showAccounts?: boolean;
   className?: string;
 }) {
   const pathname = usePathname();
@@ -74,6 +82,7 @@ export function Navbar({
   const showAvatar = Boolean(avatarUrl && !avatarBroken);
   const mark = useMemo(() => initials(displayName, email), [displayName, email]);
   const hiName = useMemo(() => greetingName(displayName, email), [displayName, email]);
+  const items = useMemo(() => navItems(showAccounts), [showAccounts]);
 
   return (
     <header
@@ -123,7 +132,7 @@ export function Navbar({
         </div>
 
         <nav className="hidden items-center gap-1 sm:flex" aria-label="Main">
-          {NAV.map(({ href, label }) => (
+          {items.map(({ href, label }) => (
             <Link key={href} href={href} className={navLinkClass(pathname === href)}>
               {label}
             </Link>
@@ -139,7 +148,7 @@ export function Navbar({
       </div>
 
       <div className="mx-auto flex w-full max-w-6xl items-center gap-1.5 px-4 pb-3 sm:hidden sm:px-6">
-        {NAV.map(({ href, label }) => (
+        {items.map(({ href, label }) => (
           <Link key={href} href={href} className={mobileLinkClass(pathname === href)}>
             {label}
           </Link>

@@ -152,8 +152,9 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
 
   const spentByCategoryThisMonth = useMemo(() => {
     const spentByCategory = new Map<string, number>();
+    const scopeAllHousehold = !canWriteExpenses;
     for (const e of expenses) {
-      if (selfUserId != null && e.user_id !== selfUserId) continue;
+      if (!scopeAllHousehold && selfUserId != null && e.user_id !== selfUserId) continue;
       if ((e.spend_source ?? "budget") !== "budget") continue;
       const d = new Date(e.date);
       if (Number.isNaN(d.getTime())) continue;
@@ -162,7 +163,7 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
       spentByCategory.set(e.category, (spentByCategory.get(e.category) ?? 0) + amt);
     }
     return spentByCategory;
-  }, [expenses, calendarMonth, selfUserId]);
+  }, [expenses, calendarMonth, selfUserId, canWriteExpenses]);
 
   const monthSpent = useMemo(() => {
     let total = 0;
@@ -271,25 +272,38 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
 
       <Section title="This month">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Link href="/settings" className="group block min-h-0 rounded-[26px] outline-none focus-visible:ring-2 focus-visible:ring-violet-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas">
+          {canWriteExpenses ? (
+            <Link
+              href="/settings"
+              className="group block min-h-0 rounded-[26px] outline-none focus-visible:ring-2 focus-visible:ring-violet-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+            >
+              <StatCard
+                kicker="Monthly budget"
+                value={monthlyLimit === null ? "—" : formatMoney(monthlyLimit)}
+                icon={Target}
+                tone="rose"
+                className="h-full transition group-hover:brightness-[1.02]"
+              />
+            </Link>
+          ) : (
             <StatCard
-              kicker="Monthly budget"
+              kicker="Household budget"
               value={monthlyLimit === null ? "—" : formatMoney(monthlyLimit)}
               icon={Target}
               tone="rose"
-              className="h-full transition group-hover:brightness-[1.02]"
+              className="h-full"
             />
-          </Link>
+          )}
 
           <StatCard
-            kicker="Spent"
+            kicker={canWriteExpenses ? "Spent" : "Household spent"}
             value={formatMoney(monthSpent)}
             icon={CircleDollarSign}
             tone="violet"
           />
 
           <StatCard
-            kicker="Left"
+            kicker={canWriteExpenses ? "Left" : "Left vs budget"}
             value={amountLeft === null ? "—" : formatMoney(amountLeft)}
             icon={Wallet}
             tone="emerald"
@@ -309,38 +323,42 @@ export function DashboardClient({ calendarMonth, todayUtc }: DashboardClientProp
               />
             </div>
           </Card>
-        ) : (
+        ) : canWriteExpenses ? (
           <Link
             href="/settings"
             className="inline-flex text-sm font-medium text-fuchsia-700 underline-offset-2 hover:underline"
           >
             Set budget in Settings →
           </Link>
+        ) : (
+          <p className="text-sm text-ink/55">Budget and caps are set by your household admin.</p>
         )}
       </Section>
 
-      <Card variant="quiet" className="border border-rose-100/80 p-4 sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-50 text-violet-800 ring-1 ring-violet-200/80">
-              <Wallet className="h-5 w-5" aria-hidden />
+      {canWriteExpenses ? (
+        <Card variant="quiet" className="border border-rose-100/80 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-50 text-violet-800 ring-1 ring-violet-200/80">
+                <Wallet className="h-5 w-5" aria-hidden />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-ink">Cash accounts & savings pool</p>
+                <p className="mt-1 max-w-xl text-sm text-ink/55">
+                  Day-to-day balances and month-end savings live on Accounts. The dashboard stays focused on this
+                  month&apos;s budget.
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-ink">Cash accounts & savings pool</p>
-              <p className="mt-1 max-w-xl text-sm text-ink/55">
-                Day-to-day balances and month-end savings live on Accounts. The dashboard stays focused on this
-                month&apos;s budget.
-              </p>
-            </div>
+            <Link
+              href="/accounts"
+              className="shrink-0 rounded-xl bg-white/80 px-4 py-2 text-sm font-semibold text-fuchsia-800 ring-1 ring-fuchsia-200/80 hover:bg-fuchsia-50/90"
+            >
+              Open Accounts
+            </Link>
           </div>
-          <Link
-            href="/accounts"
-            className="shrink-0 rounded-xl bg-white/80 px-4 py-2 text-sm font-semibold text-fuchsia-800 ring-1 ring-fuchsia-200/80 hover:bg-fuchsia-50/90"
-          >
-            Open Accounts
-          </Link>
-        </div>
-      </Card>
+        </Card>
+      ) : null}
 
       {categoryBudgetProgress.length > 0 ? (
         <Section title="Categories">

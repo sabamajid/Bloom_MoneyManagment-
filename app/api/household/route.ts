@@ -29,6 +29,16 @@ export async function GET() {
       return jsonError("Could not load members.", 500);
     }
 
+    const { data: houseRow, error: houseErr } = await supabase
+      .from("households")
+      .select("name")
+      .eq("id", access.householdId)
+      .maybeSingle();
+
+    if (houseErr) {
+      console.error(houseErr);
+    }
+
     const ids = (members ?? []).map((m) => m.user_id as string);
     const profileByUser: Record<string, string | null> = {};
     if (ids.length) {
@@ -46,7 +56,8 @@ export async function GET() {
 
     let invites: Array<{
       id: string;
-      email: string;
+      token: string;
+      email: string | null;
       role: string;
       expires_at: string;
       created_at: string;
@@ -55,7 +66,7 @@ export async function GET() {
     if (access.canInvite) {
       const { data: inv, error: invErr } = await supabase
         .from("household_invites")
-        .select("id, email, role, expires_at, created_at")
+        .select("id, token, email, role, expires_at, created_at")
         .eq("household_id", access.householdId)
         .order("created_at", { ascending: false });
 
@@ -69,6 +80,7 @@ export async function GET() {
     return NextResponse.json({
       selfUserId: user.id,
       householdId: access.householdId,
+      householdName: (houseRow?.name as string | undefined) ?? "Family",
       role: access.role,
       canWriteExpenses: access.canWriteExpenses,
       canInvite: access.canInvite,

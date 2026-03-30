@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { monthKeyFromDate } from "@/lib/format";
+import { ensureHouseholdAccess } from "@/lib/household/access";
+import { budgetOwnerUserId } from "@/lib/household/budgetOwner";
 import { createRouteHandlerClient } from "@/lib/supabase/route-handler";
 
 function jsonError(message: string, status: number) {
@@ -24,10 +26,13 @@ export async function GET(request: Request) {
     const monthKey = resolveMonthKey(new URL(request.url).searchParams.get("month"));
     if (!monthKey) return jsonError("Invalid month format. Use YYYY-MM.", 400);
 
+    const access = await ensureHouseholdAccess(supabase);
+    const budgetUserId = await budgetOwnerUserId(supabase, access, user.id);
+
     const { data, error } = await supabase
       .from("monthly_limits")
       .select("limit_amount")
-      .eq("user_id", user.id)
+      .eq("user_id", budgetUserId)
       .eq("month_key", monthKey)
       .maybeSingle();
 
@@ -47,7 +52,7 @@ export async function GET(request: Request) {
     const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
       .select("default_monthly_limit")
-      .eq("user_id", user.id)
+      .eq("user_id", budgetUserId)
       .maybeSingle();
 
     if (profileError) {
@@ -73,6 +78,11 @@ export async function PUT(request: Request) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return jsonError("Unauthorized", 401);
+
+    const access = await ensureHouseholdAccess(supabase);
+    if (access?.role === "view") {
+      return jsonError("Guests cannot change the household budget. Ask your admin.", 403);
+    }
 
     const body = (await request.json()) as {
       month?: string | null;

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { isValidCategoryName } from "@/lib/categories";
+import { ensureHouseholdAccess } from "@/lib/household/access";
+import { budgetOwnerUserId } from "@/lib/household/budgetOwner";
 import { createRouteHandlerClient } from "@/lib/supabase/route-handler";
 
 function jsonError(message: string, status: number) {
@@ -15,10 +17,13 @@ export async function GET() {
     } = await supabase.auth.getUser();
     if (!user) return jsonError("Unauthorized", 401);
 
+    const access = await ensureHouseholdAccess(supabase);
+    const budgetUserId = await budgetOwnerUserId(supabase, access, user.id);
+
     const [{ data: customRows, error: customError }, { data: limitRows, error: limitsError }] =
       await Promise.all([
-        supabase.from("user_categories").select("id,name").eq("user_id", user.id),
-        supabase.from("category_limits").select("category_name,limit_amount").eq("user_id", user.id),
+        supabase.from("user_categories").select("id,name").eq("user_id", budgetUserId),
+        supabase.from("category_limits").select("category_name,limit_amount").eq("user_id", budgetUserId),
       ]);
 
     if (customError) return jsonError(customError.message || "Could not load categories.", 500);

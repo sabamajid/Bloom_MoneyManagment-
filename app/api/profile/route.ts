@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { ensureHouseholdAccess } from "@/lib/household/access";
 import { formatSupabaseError } from "@/lib/supabase/formatError";
 import { createRouteHandlerClient } from "@/lib/supabase/route-handler";
 
@@ -47,14 +48,29 @@ export async function GET() {
       .maybeSingle();
 
     if (error) {
-      console.error(error);
+      console.error("GET /api/profile:", formatSupabaseError(error));
       return jsonError(error.message || "Could not load profile.", 500);
+    }
+
+    const access = await ensureHouseholdAccess(supabase);
+    let household: { name: string; role: string } | null = null;
+    if (access) {
+      const { data: hrow } = await supabase
+        .from("households")
+        .select("name")
+        .eq("id", access.householdId)
+        .maybeSingle();
+      household = {
+        name: (hrow?.name as string | undefined) ?? "Family",
+        role: access.role,
+      };
     }
 
     return NextResponse.json({
       userId: user.id,
       displayName: data?.display_name ?? null,
       avatarUrl: data?.avatar_url ?? null,
+      household,
     });
   } catch (err) {
     console.error(err);

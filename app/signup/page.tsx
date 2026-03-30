@@ -3,15 +3,23 @@ import { redirect } from "next/navigation";
 
 import { SignupForm } from "@/components/auth/SignupForm";
 import { Card } from "@/components/ui/Card";
+import { safeAppPath } from "@/lib/auth/safePath";
 import { createClient } from "@/lib/supabase/server";
 
-export default async function SignupPage() {
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user) redirect("/dashboard");
+  const sp = await searchParams;
+  const nextPath = safeAppPath(sp.next);
+
+  if (user) redirect(nextPath);
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center px-4 py-10">
@@ -34,7 +42,7 @@ export default async function SignupPage() {
         </p>
 
         <div className="mt-6">
-          <SignupForm />
+          <SignupForm nextPath={nextPath} />
         </div>
       </Card>
     </div>

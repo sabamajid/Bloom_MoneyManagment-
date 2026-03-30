@@ -515,25 +515,99 @@ grant execute on function public.household_member_role(uuid, uuid) to authentica
 revoke all on function public.users_in_same_household(uuid, uuid) from public;
 grant execute on function public.users_in_same_household(uuid, uuid) to authenticated;
 
--- Pending email invites (only admin creates). Role: full | view (not admin).
+create or replace function public.current_user_household_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select hm.household_id
+  from public.household_members hm
+  where hm.user_id = auth.uid()
+  limit 1;
+$$;
+
+create or replace function public.household_admin_user_id(p_household_id uuid)
+returns uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select m.user_id
+  from public.household_members m
+  where m.household_id = p_household_id
+    and m.role = 'admin'
+  limit 1;
+$$;
+
+revoke all on function public.current_user_household_id() from public;
+grant execute on function public.current_user_household_id() to authenticated;
+
+revoke all on function public.household_admin_user_id(uuid) from public;
+grant execute on function public.household_admin_user_id(uuid) to authenticated;
+
+-- Guests (view) read the household admin's budget rows for dashboard/expenses UI.
+drop policy if exists "monthly_limits_select_household_guest" on public.monthly_limits;
+create policy "monthly_limits_select_household_guest"
+  on public.monthly_limits
+  for select
+  to authenticated
+  using (
+    public.household_member_role(public.current_user_household_id(), auth.uid()) = 'view'
+    and public.monthly_limits.user_id = public.household_admin_user_id(public.current_user_household_id())
+  );
+
+drop policy if exists "user_categories_select_household_guest" on public.user_categories;
+create policy "user_categories_select_household_guest"
+  on public.user_categories
+  for select
+  to authenticated
+  using (
+    public.household_member_role(public.current_user_household_id(), auth.uid()) = 'view'
+    and public.user_categories.user_id = public.household_admin_user_id(public.current_user_household_id())
+  );
+
+drop policy if exists "category_limits_select_household_guest" on public.category_limits;
+create policy "category_limits_select_household_guest"
+  on public.category_limits
+  for select
+  to authenticated
+  using (
+    public.household_member_role(public.current_user_household_id(), auth.uid()) = 'view'
+    and public.category_limits.user_id = public.household_admin_user_id(public.current_user_household_id())
+  );
+
+-- Short-lived share links (admin only). Optional legacy email column; token-only invites use email IS NULL.
+-- Default expiry 15 minutes; authenticated user who opens link in time joins with their own account.
 create table if not exists public.household_invites (
   id uuid primary key default gen_random_uuid(),
   household_id uuid not null references public.households (id) on delete cascade,
-  email text not null check (char_length(trim(email)) between 3 and 320),
+  email text,
   role text not null check (role in ('full', 'view')),
   token text not null unique default encode(gen_random_bytes(16), 'hex'),
-  -- No FK to auth.users: PostgREST clients use role "authenticated", which cannot SELECT
-  -- auth.users (FK checks and some RLS subqueries require that privilege and fail with 42501).
   invited_by uuid not null,
-  expires_at timestamptz not null default (now() + interval '14 days'),
-  created_at timestamptz not null default now()
+  expires_at timestamptz not null default (now() + interval '15 minutes'),
+  created_at timestamptz not null default now(),
+  constraint household_invites_email_check check (email is null or char_length(trim(email)) between 3 and 320)
 );
 
 alter table public.household_invites
   drop constraint if exists household_invites_invited_by_fkey;
 
+-- Migrate older databases (email required / long expiry defaults).
+alter table public.household_invites alter column email drop not null;
+alter table public.household_invites drop constraint if exists household_invites_email_check;
+alter table public.household_invites
+  add constraint household_invites_email_check check (email is null or char_length(trim(email)) between 3 and 320);
+alter table public.household_invites
+  alter column expires_at set default (now() + interval '15 minutes');
+
+drop index if exists household_invites_house_email_lower_idx;
 create unique index if not exists household_invites_house_email_lower_idx
-  on public.household_invites (household_id, lower(trim(email)));
+  on public.household_invites (household_id, lower(trim(email)))
+  where email is not null;
 
 create index if not exists household_invites_household_id_idx
   on public.household_invites (household_id);
@@ -542,6 +616,7 @@ alter table public.household_invites enable row level security;
 
 drop policy if exists "household_invites_select_admin" on public.household_invites;
 drop policy if exists "household_invites_select_invitee" on public.household_invites;
+-- (legacy) email-matched invitee policy removed — joins use time-limited token only.
 drop policy if exists "household_invites_insert_admin" on public.household_invites;
 drop policy if exists "household_invites_delete_admin" on public.household_invites;
 
@@ -575,6 +650,18 @@ create policy "household_members_select_peers"
   to authenticated
   using (public.household_has_member(public.household_members.household_id, auth.uid()));
 
+drop policy if exists "household_members_update_admin" on public.household_members;
+create policy "household_members_update_admin"
+  on public.household_members
+  for update
+  to authenticated
+  using (public.household_member_role(public.household_members.household_id, auth.uid()) = 'admin')
+  with check (public.household_member_role(public.household_members.household_id, auth.uid()) = 'admin');
+
+drop policy if exists "household_members_delete_admin" on public.household_members;
+drop policy if exists "household_members_delete_self_leave" on public.household_members;
+-- Member removal: admin_detach_household_member() (expense detach + delete under definer).
+
 -- Admins manage invites.
 create policy "household_invites_select_admin"
   on public.household_invites
@@ -582,15 +669,6 @@ create policy "household_invites_select_admin"
   to authenticated
   using (
     public.household_member_role(public.household_invites.household_id, auth.uid()) = 'admin'
-  );
-
-create policy "household_invites_select_invitee"
-  on public.household_invites
-  for select
-  to authenticated
-  using (
-    lower(trim(coalesce(auth.jwt() ->> 'email', '')))
-    = lower(trim(public.household_invites.email))
   );
 
 create policy "household_invites_insert_admin"
@@ -722,7 +800,7 @@ $$;
 revoke all on function public.create_default_household() from public;
 grant execute on function public.create_default_household() to authenticated;
 
--- Accept invite: must be logged in as invite email; migrates a solo household if needed.
+-- Accept invite: logged-in user joins via time-limited token (no email match). Migrates solo household if needed.
 create or replace function public.accept_household_invite(invite_token text)
 returns jsonb
 language plpgsql
@@ -732,7 +810,6 @@ as $$
 declare
   inv public.household_invites%rowtype;
   uid uuid := auth.uid();
-  uemail text;
   cur_hid uuid;
   mem_count int;
 begin
@@ -740,9 +817,8 @@ begin
     return jsonb_build_object('ok', false, 'error', 'Missing invite token.');
   end if;
 
-  select email into uemail from auth.users where id = uid;
-  if uemail is null then
-    return jsonb_build_object('ok', false, 'error', 'No email on account.');
+  if uid is null then
+    return jsonb_build_object('ok', false, 'error', 'Not authenticated.');
   end if;
 
   select *
@@ -752,14 +828,21 @@ begin
     and expires_at > now();
 
   if inv.id is null then
-    return jsonb_build_object('ok', false, 'error', 'Invalid or expired invite.');
+    return jsonb_build_object('ok', false, 'error', 'Invalid or expired invite. Ask for a new link (links expire in 15 minutes).');
   end if;
 
-  if lower(trim(inv.email)) <> lower(trim(uemail)) then
-    return jsonb_build_object(
-      'ok', false,
-      'error', 'Sign in with the invited email address, then try again.'
-    );
+  if inv.email is not null then
+    -- Legacy email-bound invites (optional): must still match signed-in user.
+    if not exists (
+      select 1 from auth.users u
+      where u.id = uid
+        and lower(trim(coalesce(u.email, ''))) = lower(trim(inv.email))
+    ) then
+      return jsonb_build_object(
+        'ok', false,
+        'error', 'Sign in with the invited email address, then try again.'
+      );
+    end if;
   end if;
 
   if exists (
@@ -812,6 +895,68 @@ $$;
 
 revoke all on function public.accept_household_invite(text) from public;
 grant execute on function public.accept_household_invite(text) to authenticated;
+
+-- Detach a guest/full member's expenses and remove membership (admin only; RLS blocks raw expense updates).
+create or replace function public.admin_detach_household_member(p_target_user_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  hid uuid;
+  admin_uid uuid := auth.uid();
+  target_role text;
+begin
+  if admin_uid is null or p_target_user_id is null then
+    return jsonb_build_object('ok', false, 'error', 'Not authenticated.');
+  end if;
+
+  if p_target_user_id = admin_uid then
+    return jsonb_build_object('ok', false, 'error', 'Admins cannot remove themselves here.');
+  end if;
+
+  select hm.household_id into hid
+  from public.household_members hm
+  where hm.user_id = admin_uid
+  limit 1;
+
+  if hid is null then
+    return jsonb_build_object('ok', false, 'error', 'No household.');
+  end if;
+
+  if public.household_member_role(hid, admin_uid) is distinct from 'admin' then
+    return jsonb_build_object('ok', false, 'error', 'Only the household admin can remove members.');
+  end if;
+
+  select m.role into target_role
+  from public.household_members m
+  where m.household_id = hid
+    and m.user_id = p_target_user_id;
+
+  if target_role is null then
+    return jsonb_build_object('ok', false, 'error', 'That person is not in your household.');
+  end if;
+
+  if target_role = 'admin' then
+    return jsonb_build_object('ok', false, 'error', 'Cannot remove the household admin.');
+  end if;
+
+  update public.expenses e
+  set household_id = null
+  where e.user_id = p_target_user_id
+    and e.household_id = hid;
+
+  delete from public.household_members m
+  where m.household_id = hid
+    and m.user_id = p_target_user_id;
+
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+revoke all on function public.admin_detach_household_member(uuid) from public;
+grant execute on function public.admin_detach_household_member(uuid) to authenticated;
 
 -- Read peers' cash accounts for labels (no writes on their rows unless RLS allows — insert/update remain own-only).
 create policy "user_accounts_select_household_peers"

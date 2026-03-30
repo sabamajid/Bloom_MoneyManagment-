@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { createClient } from "@/lib/supabase/client";
 
-export function SignupForm() {
+export function SignupForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,7 +45,7 @@ export function SignupForm() {
       }
 
       setInfo("You're in. Redirecting...");
-      router.push("/dashboard");
+      router.push(nextPath);
       router.refresh();
     } catch {
       setError("Network error. Please try again.");

@@ -62,18 +62,11 @@ export function ExpensesClient({ initialMonth, todayUtc }: Props) {
     setError(null);
     setLoading(true);
     try {
-      const [res, accRes, labelsRes, householdRes] = await Promise.all([
+      const [res, householdRes] = await Promise.all([
         fetch(query, { method: "GET" }),
-        fetch("/api/accounts", { method: "GET" }),
-        fetch("/api/accounts/household-labels", { method: "GET" }),
         fetch("/api/household", { method: "GET" }),
       ]);
       const payload = (await res.json()) as { error?: string; expenses?: Expense[] };
-      const accPayload = (await accRes.json()) as { accounts?: AccountWithBalance[] };
-      const labelsPayload = (await labelsRes.json()) as {
-        error?: string;
-        accounts?: Array<{ id: string; name: string }>;
-      };
       const householdPayload = (await householdRes.json()) as {
         error?: string;
         canWriteExpenses?: boolean;
@@ -85,15 +78,42 @@ export function ExpensesClient({ initialMonth, todayUtc }: Props) {
         setCanWriteExpenses(true);
       }
 
-      if (accRes.ok) {
-        setAccounts(accPayload.accounts ?? []);
-      }
+      const guest = householdRes.ok && householdPayload.canWriteExpenses === false;
 
-      if (labelsRes.ok) {
-        const rows = labelsPayload.accounts ?? [];
-        setAccountLabelRows(rows.map((r) => ({ id: r.id, name: r.name })));
+      if (guest) {
+        setAccounts([]);
+        const labelsRes = await fetch("/api/accounts/household-labels", { method: "GET" });
+        const labelsPayload = (await labelsRes.json()) as {
+          error?: string;
+          accounts?: Array<{ id: string; name: string }>;
+        };
+        if (labelsRes.ok) {
+          const rows = labelsPayload.accounts ?? [];
+          setAccountLabelRows(rows.map((r) => ({ id: r.id, name: r.name })));
+        } else {
+          setAccountLabelRows([]);
+        }
       } else {
-        setAccountLabelRows([]);
+        const [accRes, labelsRes] = await Promise.all([
+          fetch("/api/accounts", { method: "GET" }),
+          fetch("/api/accounts/household-labels", { method: "GET" }),
+        ]);
+        const accPayload = (await accRes.json()) as { accounts?: AccountWithBalance[] };
+        const labelsPayload = (await labelsRes.json()) as {
+          error?: string;
+          accounts?: Array<{ id: string; name: string }>;
+        };
+
+        if (accRes.ok) {
+          setAccounts(accPayload.accounts ?? []);
+        }
+
+        if (labelsRes.ok) {
+          const rows = labelsPayload.accounts ?? [];
+          setAccountLabelRows(rows.map((r) => ({ id: r.id, name: r.name })));
+        } else {
+          setAccountLabelRows([]);
+        }
       }
 
       if (!res.ok) {
